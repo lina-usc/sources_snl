@@ -491,7 +491,7 @@ class SourceEstimator:
         else:
             trans = mne.read_trans(trans_path)
 
-        if plot:
+        if self.plot:
             fig, axes = plt.subplots(1, 3, figsize=(25, 8))
 
             for i, ax in enumerate(axes):
