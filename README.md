@@ -1,6 +1,6 @@
 # Usage
 
-1. Clone `git clone git@github.com:lina-usc/sources_snl.git`
+1. Clone `git clone https://github.com/lina-usc/sources_snl.git`
 2. Install `pip install --editable sources_snl`
 3. Use:
 
