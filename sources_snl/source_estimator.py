@@ -387,12 +387,12 @@ class SourceEstimator:
 
         return raw
 
-    def get_mri_images(self, subject, image_kinds=("t1", "t2", "lesion")):
+    def get_mri_images(self, subject, image_kinds=("T1.nii", "rT2.nii", "rLesion.nii")):
         images = {}
         path = self.root_path / self.group / subject
         for image_kind in image_kinds:
             paths = [path for path in path.glob("*") 
-                            if image_kind in path.name.lower()]
+                            if image_kind in path.name]
             if len(paths) == 0:
                 raise ValueError(f"There is no file with '{image_kind}' in {path}.")
             if len(paths) > 1:
