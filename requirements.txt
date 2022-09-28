@@ -10,3 +10,4 @@ nibabel
 ipympl
 trimesh
 h5io
+pyvistaqt
