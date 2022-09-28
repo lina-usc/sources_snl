@@ -8,3 +8,4 @@ darkdetect
 ipyvtklink 
 nibabel
 ipympl
+trimesh
