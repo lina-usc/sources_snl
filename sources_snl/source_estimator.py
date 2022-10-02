@@ -76,19 +76,19 @@ def bash(cmd, print_stdout=True, print_stderr=True):
         raise VerboseCalledProcessError(proc.returncode, cmd, stdout_text, stderr_text)
 
 
+def get_epochs(raw, **kwargs):
 
-def get_epochs(raw,
-               tmin=-0.2,            # start of each epoch (200ms before the trigger)
-               tmax=1.0,             # end of each epoch (1000ms after the trigger)
-               baseline=(-0.2, 0)):  # means from the first instant to t = 0)
+    if "tmin" not in kwargs:
+        kwargs["tmin"] = -0.2,          # start of each epoch (200ms before the trigger)
+    if "tmax" not in kwargs:        
+        kwargs["tmax"] = 1.0,           # end of each epoch (1000ms after the trigger)
+    if "baseline" not in kwargs:               
+        kwargs["baseline"] = (-0.2, 0)  # means from the first instant to t = 0)
 
     events, event_id = mne.events_from_annotations(raw)
-    epochs = mne.Epochs(raw, events, event_id, tmin=tmin, tmax=tmax, baseline=baseline)
+    epochs = mne.Epochs(raw, events, event_id, **kwargs)
     return epochs
     
-
-
-
 
 def fix_intersecting_surfaces(inner_surface_path, outer_surface_path,
                               move_margin=1.5, out_path=None):
@@ -336,14 +336,13 @@ def get_stcs(epochs, fwd, src_kwargs):
 
 class SourceEstimator:
 
-    def __init__(self, root_path, subjects_dir, group, subjects, recompute, 
+    def __init__(self, root_path, subjects_dir, subjects, recompute, 
                  time_downsample_factor, event_types, src_kwargs, 
                  lesion_margin, result_dir="./results", plot=True,
                  preprocess=True):
 
         self.root_path = Path(root_path)
         self.subjects_dir = Path(subjects_dir)
-        self.group = group
         self.subjects = subjects
         self.recompute = recompute 
         self.time_downsample_factor = time_downsample_factor
@@ -359,17 +358,17 @@ class SourceEstimator:
         self.result_dir.mkdir(exist_ok=True, parents=True)
 
 
-    def get_file_name(self, subject):
-        files = list((self.root_path / self.group / subject).glob("*.set"))
+    def get_file_name(self, subject, group):
+        files = list((self.root_path / group / subject).glob("*.set"))
 
         if len(files) == 0:
-            raise ValueError(f"There is not .set file in {self.root_path / self.group / subject}.")
+            raise ValueError(f"There is not .set file in {self.root_path / group / subject}.")
         if len(files) > 1:
-            raise ValueError(f"There is more than one .set file in {self.root_path / self.group / subject}.")
+            raise ValueError(f"There is more than one .set file in {self.root_path / group / subject}.")
         return files[0]
 
-    def get_raw(self, subject):
-        file_name = self.get_file_name(subject)  
+    def get_raw(self, subject, group):
+        file_name = self.get_file_name(subject, group)  
         raw = mne.io.read_raw_eeglab(file_name, preload=True)
         raw.load_data()
 
@@ -387,9 +386,9 @@ class SourceEstimator:
 
         return raw
 
-    def get_mri_images(self, subject, image_kinds=("T1.nii", "rT2.nii", "rLesion.nii")):
+    def get_mri_images(self, subject, group, image_kinds=("T1.nii", "rT2.nii", "rLesion.nii")):
         images = {}
-        path = self.root_path / self.group / subject
+        path = self.root_path / group / subject
         for image_kind in image_kinds:
             paths = [path for path in path.glob("*") 
                             if image_kind in path.name]
@@ -506,25 +505,49 @@ class SourceEstimator:
 
 
     def process_all_subjects(self):
-        for subject in self.subjects:
-            self.process_subject(subject)
+        for group, subject_lst in self.subjects.items():
+            for subject in subject_lst:
+                use_template = group == "Control"
+                self.process_subject(subject, group, use_template)
 
-    def process_subject(self, subject):
-        raw = self.get_raw(subject)
-        images = self.get_mri_images(subject)
-        src = self.load_src(subject)
-        bem_sol = self.make_bem(subject)
-        trans = self.coregister(subject, raw.info, src, bem_sol)
-        fwd = mne.make_forward_solution(raw.info, trans=trans, src=src,
-                                        bem=bem_sol, eeg=True, mindist=5.0)
-        fwd = remove_lesion_borders(self.lesion_margin, fwd, images["rLesion.nii"], self.subjects_dir, 
-                                    subject, trans, raw.info, bem_sol)
+    def process_subject(self, subject, group, use_template):
+        # Read raw recording
+        raw = self.get_raw(subject, group)
 
+        # Get a head model, individual or population template
+        if use_template:
+            fs_dir = Path(mne.datasets.fetch_fsaverage(verbose=True))
+            src_path = fs_dir / 'bem' /  'fsaverage-ico-5-src.fif'
+
+            src = mne.read_source_spaces(src_path)
+            bem_sol = fs_dir / 'bem' / 'fsaverage-5120-5120-5120-bem-sol.fif'
+            trans = 'fsaverage'  # MNE has a built-in fsaverage transformation
+            fwd = mne.make_forward_solution(raw.info, trans=trans, src=src,
+                                            bem=bem_sol, eeg=True, mindist=5.0)
+
+        else:
+            images = self.get_mri_images(subject, group)
+            src = self.load_src(subject)
+            bem_sol = self.make_bem(subject)
+            trans = self.coregister(subject, raw.info, src, bem_sol)
+            fwd = mne.make_forward_solution(raw.info, trans=trans, src=src,
+                                            bem=bem_sol, eeg=True, mindist=5.0)
+            fwd = remove_lesion_borders(self.lesion_margin, fwd, images["rLesion"], self.subjects_dir, 
+                                        subject, trans, raw.info, bem_sol)
+
+        # Compute and save sources
         for event_type, kwargs in self.event_types.items():
             epochs = get_epochs(raw, **kwargs)
             stcs = get_stcs(epochs, fwd, self.src_kwargs)
+            
+            file_name = f'eLORETA_native_sources_{subject}_{event_type.replace("/", "_").replace(" ", "_")}'
+            stcs.save(self.result_dir / file_name, ftype="stc", overwrite=True)
+            
             file_name = f'eLORETA_surface_{subject}_{event_type.replace("/", "_").replace(" ", "_")}.nii.gz'
-            save_surface_src_volume(stcs, subject, self.subjects_dir, self.time_downsample_factor,
-                                    save_file_name=self.result_dir / file_name)
-
-
+            if use_template:
+                fs_dir = Path(mne.datasets.fetch_fsaverage(verbose=True))
+                save_surface_src_volume(stcs, 'fsaverage', fs_dir.parent, self.time_downsample_factor,
+                                        save_file_name=self.result_dir / file_name)
+            else:
+                save_surface_src_volume(stcs, subject, self.subjects_dir, self.time_downsample_factor,
+                                        save_file_name=self.result_dir / file_name)
