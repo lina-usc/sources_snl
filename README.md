@@ -1,8 +1,17 @@
 # Usage
 
+## Installation
 1. Clone `git clone https://github.com/lina-usc/sources_snl.git`
 2. Install `pip install --editable sources_snl`
-3. Use:
+
+## Updating and existing installation
+
+1. Using the `cd` command, move to the directory `source_snl` containing the source of this package.
+2. Update your local version of the source by running `git pull --rebased`
+
+## Running the pipeline
+
+Use (adjusting the configuration used in this example to fit your needs):
 
 ```python
 from sources_snl import SourceEstimator
@@ -12,7 +21,7 @@ from sources_snl import SourceEstimator
 # the list of subjects to process. Subjects in the group "Aphasia" will be processed
 # with individual head models; subjects in the group "Control" will be processed
 # with the standard fsaverage template.
-subjects = {"Aphasia": ["ASubject52"],
+subjects = {"Aphasia": ["ASubject51", "ASubject52"],
             "Control": ["CSubject20"]}
 
 # Dictionary of the event types for which to compute the sources and the info for epoching. 
@@ -39,3 +48,8 @@ estimator = SourceEstimator(root_path = "/Users/christian/Library/CloudStorage/O
 
 estimator.process_all_subjects()
 ```
+
+# Output
+
+All generated files are saved in the folder specified as `result_dir` as specificed in the example above. This folder contains validation plots, an nii.gz file containing the surface sources co-registered to the cortical ribbon of the subject, and the .stc files containing the native sources computed by `mne-python`.
+
