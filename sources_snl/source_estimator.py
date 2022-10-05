@@ -532,7 +532,7 @@ class SourceEstimator:
             trans = self.coregister(subject, raw.info, src, bem_sol)
             fwd = mne.make_forward_solution(raw.info, trans=trans, src=src,
                                             bem=bem_sol, eeg=True, mindist=5.0)
-            fwd = remove_lesion_borders(self.lesion_margin, fwd, images["rLesion"], self.subjects_dir, 
+            fwd = remove_lesion_borders(self.lesion_margin, fwd, images["rLesion.nii"], self.subjects_dir, 
                                         subject, trans, raw.info, bem_sol)
 
         # Compute and save sources
