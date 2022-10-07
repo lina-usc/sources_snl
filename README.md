@@ -7,7 +7,7 @@
 ## Updating and existing installation
 
 1. Using the `cd` command, move to the directory `source_snl` containing the source of this package.
-2. Update your local version of the source by running `git pull --rebased`
+2. Update your local version of the source by running `git pull --rebase`
 
 ## Running the pipeline
 
@@ -42,6 +42,8 @@ estimator = SourceEstimator(root_path = "/Users/christian/Library/CloudStorage/O
                             recompute = False,                                          # Recompute artifacts that have already been computed?
                             time_downsample_factor = 5,                                 # Time downsampling factor for saving the sources as a 4D NIfTI file
                             event_types = event_types,
+                            average = [0.2, 0.4],                                       # If not None, should a list with two terms for the boundary of 
+                                                                                        # the time interval to be used for averaging                            
                             src_kwargs = {"method": "eLORETA", "lambda2": 0.1},         # Source estimation parameters
                             lesion_margin = 3,                                          # Border to remover around the lesion (in mm); set to 0 for deactivated lesion border removal
                             result_dir = "./results")                                   # Where the save the results and the figures

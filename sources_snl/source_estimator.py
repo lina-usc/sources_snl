@@ -292,7 +292,7 @@ def remove_lesion_borders(lesion_margin, fwd, lesion_img, subjects_dir, subject,
 
 
 
-def save_surface_src_volume(stc, subject, subjects_dir, time_downsample_factor=20, 
+def save_surface_src_volume(stc, subject, subjects_dir, time_downsample_factor=20, average=None,
                             save_file_name="data.nii.gz"):
     n_vertices = sum(len(v) for v in stc.vertices)
     offset = 0
@@ -313,17 +313,27 @@ def save_surface_src_volume(stc, subject, subjects_dir, time_downsample_factor=2
             (data, (row_ind, col_ind)), shape=(mri_data.size, n_vertices))
         offset += len(stc.vertices[hi])
 
-    source_data = xr.DataArray(stc.data, dims=["sources", "time"]) \
-                    .rolling(time=time_downsample_factor, center=True) \
-                    .mean()[:, time_downsample_factor//2:-time_downsample_factor//2:time_downsample_factor]
 
-    data_all_times = []
-    for time_data in source_data.transpose("time", "sources").values:
-        data = surf_to_mri.dot(time_data)
+
+    if average is None:
+        source_data = xr.DataArray(stc.data, dims=["sources", "time"]) \
+                        .rolling(time=time_downsample_factor, center=True) \
+                        .mean()[:, time_downsample_factor//2:-time_downsample_factor//2:time_downsample_factor]
+
+        data_all_times = []
+        for time_data in source_data.transpose("time", "sources").values:
+            data = surf_to_mri.dot(time_data)
+            data = data.reshape(mri_data.shape).astype("float32")
+            data_all_times.append(nib.Nifti1Image(data, ribbon.affine))
+
+        nib.save(concat_images(data_all_times), save_file_name)
+    else:
+        mask = (stc.times >= average[0]) & (stc.times <= average[0])
+        source_data = xr.DataArray(stc.data[:, mask].mean(1), dims=["sources"])
+
+        data = surf_to_mri.dot(source_data)
         data = data.reshape(mri_data.shape).astype("float32")
-        data_all_times.append(nib.Nifti1Image(data, ribbon.affine))
-
-    nib.save(concat_images(data_all_times), save_file_name)
+        nib.save(nib.Nifti1Image(data, ribbon.affine), save_file_name)        
 
 
 def get_stcs(epochs, fwd, src_kwargs): 
@@ -338,13 +348,14 @@ class SourceEstimator:
 
     def __init__(self, root_path, subjects_dir, subjects, recompute, 
                  time_downsample_factor, event_types, src_kwargs, 
-                 lesion_margin, result_dir="./results", plot=True,
+                 lesion_margin, average=None, result_dir="./results", plot=True,
                  preprocess=True):
 
         self.root_path = Path(root_path)
         self.subjects_dir = Path(subjects_dir)
         self.subjects = subjects
         self.recompute = recompute 
+        self.average = average
         self.time_downsample_factor = time_downsample_factor
 
         self.event_types = event_types
@@ -362,7 +373,7 @@ class SourceEstimator:
         files = list((self.root_path / group / subject).glob("*.set"))
 
         if len(files) == 0:
-            raise ValueError(f"There is not .set file in {self.root_path / group / subject}.")
+            raise ValueError(f"There is no .set file in {self.root_path / group / subject}.")
         if len(files) > 1:
             raise ValueError(f"There is more than one .set file in {self.root_path / group / subject}.")
         return files[0]
@@ -485,10 +496,10 @@ class SourceEstimator:
             compute_and_save_mri_fid(subject, fs_subject_dir=self.subjects_dir, coord_frame="mri")
             compute_and_save_trans(subject, info, fs_subject_dir=self.subjects_dir, scale=True)
             trans = mne.read_trans(trans_path)
-            validate_coregistration(subject, info, subject, self.subjects_dir, True, 
-                                    trans, src, bem_sol)
         else:
             trans = mne.read_trans(trans_path)
+        validate_coregistration(subject, info, subject, self.subjects_dir, True, 
+                                trans, src, bem_sol)            
 
         if self.plot:
             fig, axes = plt.subplots(1, 3, figsize=(25, 8))
@@ -547,7 +558,7 @@ class SourceEstimator:
             if use_template:
                 fs_dir = Path(mne.datasets.fetch_fsaverage(verbose=True))
                 save_surface_src_volume(stcs, 'fsaverage', fs_dir.parent, self.time_downsample_factor,
-                                        save_file_name=self.result_dir / file_name)
+                                        self.average, save_file_name=self.result_dir / file_name)
             else:
                 save_surface_src_volume(stcs, subject, self.subjects_dir, self.time_downsample_factor,
-                                        save_file_name=self.result_dir / file_name)
+                                        self.average, save_file_name=self.result_dir / file_name)
