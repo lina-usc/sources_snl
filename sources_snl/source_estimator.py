@@ -498,10 +498,11 @@ class SourceEstimator:
             trans = mne.read_trans(trans_path)
         else:
             trans = mne.read_trans(trans_path)
-        validate_coregistration(subject, info, subject, self.subjects_dir, True, 
-                                trans, src, bem_sol)            
 
         if self.plot:
+            validate_coregistration(subject, info, subject, self.subjects_dir, 
+                                    save=self.plot, trans=trans, src=src, bem_sol=bem_sol)            
+
             fig, axes = plt.subplots(1, 3, figsize=(25, 8))
 
             for i, ax in enumerate(axes):
